@@ -8,9 +8,17 @@ import (
 )
 
 func TestMaker_TDD(t *testing.T) {
+	type inner struct {
+		InnerInt int32 `gomaker:"rand"`
+	}
 	type dummy struct {
-		DummyId     int64  `gomaker:"rand"`
-		DummyString string `gomaker:"rand"`
+		DummyId      int64      `gomaker:"rand[1;10;1]"`
+		DummyString  string     `gomaker:"rand"`
+		DummyComplex complex128 `gomaker:"rand"`
+		Inner        inner
+	}
+	type unknown struct {
+		DummyId int64 `gomaker:"test123"`
 	}
 
 	maker := gomaker.New()
@@ -27,7 +35,13 @@ func TestMaker_TDD(t *testing.T) {
 			nil,
 		},
 		{
-			"first",
+			"pass unknown",
+			&unknown{},
+			fmt.Errorf("option not available test123"),
+			nil,
+		},
+		{
+			"happy path",
 			&dummy{},
 			nil,
 			func(in *dummy) error {
@@ -36,6 +50,12 @@ func TestMaker_TDD(t *testing.T) {
 				}
 				if in.DummyString == "" {
 					return errors.New("string not assigned")
+				}
+				if in.DummyComplex == 0 {
+					return errors.New("complex not assigned")
+				}
+				if in.Inner.InnerInt == 0 {
+					return errors.New("inner not assigned")
 				}
 				return nil
 			},
@@ -62,8 +82,8 @@ func TestMaker_TDD(t *testing.T) {
 
 func BenchmarkRandFill(b *testing.B) {
 	type dummy struct {
-		DummyId     int64  `gomaker:"rand"`
-		DummyString string `gomaker:"rand"`
+		DummyId     int64  `gomaker:"rand[1;100;5]"`
+		DummyString string `gomaker:"rand[10;10;]"`
 	}
 
 	maker := gomaker.New()
