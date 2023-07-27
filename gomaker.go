@@ -2,8 +2,10 @@ package gomaker
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
+	"time"
 )
 
 var tag = "gomaker"
@@ -16,10 +18,21 @@ const (
 )
 
 type Maker struct {
+	rand *rand.Rand
 }
 
-func New() *Maker {
-	return &Maker{}
+func New(options ...func(maker *Maker)) *Maker {
+	m := &Maker{rand: rand.New(rand.NewSource(time.Now().Unix()))}
+	for _, opt := range options {
+		opt(m)
+	}
+	return m
+}
+
+func WithSeed(seed int64) func(maker *Maker) {
+	return func(maker *Maker) {
+		maker.rand = rand.New(rand.NewSource(seed))
+	}
 }
 
 func (m Maker) Fill(model any) error {
@@ -43,7 +56,7 @@ func (m Maker) fillStruct(valueOf reflect.Value) error {
 				return err
 			}
 		} else {
-			if err := fillSimple(tagValue, valueOf.FieldByName(field.Name), kind); err != nil {
+			if err := m.fillSimple(tagValue, valueOf.FieldByName(field.Name)); err != nil {
 				return err
 			}
 		}
@@ -51,10 +64,10 @@ func (m Maker) fillStruct(valueOf reflect.Value) error {
 	return nil
 }
 
-func fillSimple(tagValue string, field reflect.Value, kind reflect.Kind) error {
+func (m Maker) fillSimple(tagValue string, field reflect.Value) error {
 	switch optionValueOf(tagValue) {
 	case random:
-		if err := fillRandomSimple(field, kind, tagValue); err != nil {
+		if err := fillRandomSimple(m.rand, field, tagValue); err != nil {
 			return err
 		}
 	case regex:

@@ -17,6 +17,7 @@ type constraints struct {
 }
 
 var defaultConstraints = constraints{min: 1, max: 10, step: 1}
+var pattern = regexp.MustCompile(`\[(\d*)?;(\d*)?;(\d*\.?\d)?]`)
 
 func (c constraints) Validate(kind reflect.Kind) error {
 	if c.min > c.max {
@@ -35,22 +36,23 @@ func (c constraints) Validate(kind reflect.Kind) error {
 	return nil
 }
 
-func fillRandomSimple(field reflect.Value, kind reflect.Kind, tagValue string) error {
+func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error {
 	c := getOptions(tagValue)
+	kind := field.Kind()
 	if err := c.Validate(kind); err != nil {
 		return err
 	}
 	switch kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		field.SetInt(randInt64(c))
+		field.SetInt(randInt64(r, c))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		field.SetUint(uint64(randInt64(c)))
+		field.SetUint(uint64(randInt64(r, c)))
 	case reflect.Float32, reflect.Float64:
-		field.SetFloat(randFloat64(c))
+		field.SetFloat(randFloat64(r, c))
 	case reflect.Complex64, reflect.Complex128:
 		field.SetComplex(complex(rand.Float64(), rand.Float64()))
 	case reflect.String:
-		field.SetString(randString(randInt64(c)))
+		field.SetString(randString(r, randInt64(r, c)))
 	case reflect.Bool:
 		field.SetBool(rand.Float64() < 0.5)
 	default:
@@ -60,7 +62,6 @@ func fillRandomSimple(field reflect.Value, kind reflect.Kind, tagValue string) e
 }
 
 func getOptions(value string) constraints {
-	pattern := regexp.MustCompile(`\[(\d*)?;(\d*)?;(\d*\.?\d)?]`)
 	matches := pattern.FindStringSubmatch(value)
 	c := defaultConstraints
 	if len(matches) == 4 {
@@ -77,13 +78,13 @@ func getOptions(value string) constraints {
 	return c
 }
 
-func randInt64(in constraints) int64 {
-	res := randFloat64(in)
+func randInt64(r *rand.Rand, in constraints) int64 {
+	res := randFloat64(r, in)
 	return int64(res)
 }
 
-func randFloat64(in constraints) float64 {
-	scale := rand.Float64()*float64(in.max-in.min) + float64(in.min)
+func randFloat64(r *rand.Rand, in constraints) float64 {
+	scale := r.Float64()*float64(in.max-in.min) + float64(in.min)
 	mod := math.Mod(scale, in.step)
 	res := (scale - mod) * in.step
 	return res
@@ -96,11 +97,11 @@ const (
 	letterIdxMax  = 63 / letterIdxBits
 )
 
-func randString(n int64) string {
+func randString(r *rand.Rand, n int64) string {
 	b := make([]byte, n)
-	for i, cache, remain := n-1, rand.Int63(), letterIdxMax; i >= 0; {
+	for i, cache, remain := n-1, r.Int63(), letterIdxMax; i >= 0; {
 		if remain == 0 {
-			cache, remain = rand.Int63(), letterIdxMax
+			cache, remain = r.Int63(), letterIdxMax
 		}
 		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
 			b[i] = letterBytes[idx]

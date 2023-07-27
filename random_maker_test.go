@@ -1,6 +1,10 @@
 package gomaker
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+	"time"
+)
 
 func Test_getOptions(t *testing.T) {
 	tests := []struct {
@@ -85,7 +89,7 @@ func Test_randInt64(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := randInt64(tt.args)
+			got := randInt64(rand.New(rand.NewSource(time.Now().Unix())), tt.args)
 			if !tt.want(got) {
 				t.Errorf("randInt64() = %v", got)
 			}

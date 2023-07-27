@@ -95,3 +95,27 @@ func BenchmarkRandFill(b *testing.B) {
 		}
 	}
 }
+
+func Test_repeatable_generation(t *testing.T) {
+	type dummy struct {
+		DummyId     int64  `gomaker:"rand[1;100;5]"`
+		DummyString string `gomaker:"rand[10;10;]"`
+	}
+	m1 := gomaker.New(gomaker.WithSeed(123))
+	model1 := &dummy{}
+	if err := m1.Fill(model1); err != nil {
+		t.Errorf(err.Error())
+	}
+	m2 := gomaker.New(gomaker.WithSeed(123))
+	model2 := &dummy{}
+	if err := m2.Fill(model2); err != nil {
+		t.Errorf(err.Error())
+	}
+
+	if model1.DummyId != model2.DummyId {
+		t.Errorf("got %v expected %v", model1.DummyId, model2.DummyId)
+	}
+	if model1.DummyString != model2.DummyString {
+		t.Errorf("got %v expected %v", model1.DummyString, model2.DummyString)
+	}
+}
