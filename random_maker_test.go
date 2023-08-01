@@ -69,7 +69,7 @@ func Test_randInt64(t *testing.T) {
 			"normal",
 			constraints{min: 1, max: 10, step: 1},
 			func(in int64) bool {
-				return in >= 1 && in < 10 && in%1 == 0
+				return in >= 1 && in < 10
 			},
 		},
 		{

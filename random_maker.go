@@ -54,7 +54,7 @@ func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error 
 	case reflect.String:
 		field.SetString(randString(r, randInt64(r, c)))
 	case reflect.Bool:
-		field.SetBool(rand.Float64() < 0.5)
+		field.SetBool(r.Float64() < 0.5)
 	default:
 		return fmt.Errorf("kind not supported: %s", kind.String())
 	}

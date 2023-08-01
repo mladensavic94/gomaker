@@ -1,0 +1,37 @@
+run:
+  tests: false
+output:
+  format: checkstyle:report.xml,colored-line-number
+linters:
+  disable-all: true
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - cyclop
+    - decorder
+    - dogsled
+    - errcheck
+    - exportloopref
+    - funlen
+    - gocognit
+    - goconst
+    - gocritic
+    - godox
+    - gosimple
+    - ineffassign
+    - interfacebloat
+    - maintidx
+    - makezero
+    - prealloc
+    - promlinter
+    - reassign
+    - staticcheck
+    - tagliatelle
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
