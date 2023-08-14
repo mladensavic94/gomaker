@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"gomaker"
 	"testing"
+	"time"
 )
 
-func TestMaker_TDD(t *testing.T) {
+func TestMaker_TDD_random(t *testing.T) {
 	type inner struct {
 		InnerInt int32 `gomaker:"rand"`
 	}
@@ -96,6 +97,22 @@ func BenchmarkRandFill(b *testing.B) {
 	}
 }
 
+func BenchmarkRegexFill(b *testing.B) {
+	type dummy struct {
+		DummyId     int64  `gomaker:"regex[[0-9]{10}]"`
+		DummyString string `gomaker:"regex[(abc)+]"`
+	}
+
+	maker := gomaker.New()
+	model := &dummy{}
+	for i := 0; i < b.N; i++ {
+		err := maker.Fill(model)
+		if err != nil {
+			b.FailNow()
+		}
+	}
+}
+
 func Test_repeatable_generation(t *testing.T) {
 	type dummy struct {
 		DummyId     int64  `gomaker:"rand[1;100;5]"`
@@ -118,4 +135,65 @@ func Test_repeatable_generation(t *testing.T) {
 	if model1.DummyString != model2.DummyString {
 		t.Errorf("got %v expected %v", model1.DummyString, model2.DummyString)
 	}
+}
+
+func TestMaker_TDD_regex(t *testing.T) {
+	type dummy struct {
+		DummyString string `gomaker:"regex[^\\d+$]"`
+	}
+	maker := gomaker.New()
+	tests := []struct {
+		name   string
+		arg    any
+		err    error
+		sanity func(in *dummy) error
+	}{
+		{
+			"pass non pointer",
+			dummy{},
+			errors.New("non-pointer argument"),
+			nil,
+		},
+		{
+			"happy path",
+			&dummy{},
+			nil,
+			func(in *dummy) error {
+				if in.DummyString == "" {
+					return errors.New("string not assigned")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := maker.Fill(tt.arg)
+			if err != nil {
+				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
+					t.Fatalf("expected: %v, got: %v", tt.err, err)
+				}
+			}
+			if tt.sanity != nil {
+				err = tt.sanity(tt.arg.(*dummy))
+				if err != nil {
+					t.Fatalf("sanity check failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestMaker_TDD_race(t *testing.T) {
+	type dummy struct {
+		DummyString string `gomaker:"regex[^\\d+$]"`
+	}
+	maker := gomaker.New()
+	go maker.Fill(&dummy{})
+	go maker.Fill(&dummy{})
+	go maker.Fill(&dummy{})
+
+	time.Sleep(time.Second)
+
 }

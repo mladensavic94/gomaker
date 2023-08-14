@@ -2,7 +2,6 @@ package gomaker
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strings"
 	"time"
@@ -15,14 +14,16 @@ type option string
 const (
 	random option = "rand"
 	regex  option = "regex"
+	parent option = "parent"
+	seed   option = "seed"
 )
 
 type Maker struct {
-	rand *rand.Rand
+	seed int64
 }
 
 func New(options ...func(maker *Maker)) *Maker {
-	m := &Maker{rand: rand.New(rand.NewSource(time.Now().Unix()))}
+	m := &Maker{seed: time.Now().Unix()}
 	for _, opt := range options {
 		opt(m)
 	}
@@ -31,7 +32,7 @@ func New(options ...func(maker *Maker)) *Maker {
 
 func WithSeed(seed int64) func(maker *Maker) {
 	return func(maker *Maker) {
-		maker.rand = rand.New(rand.NewSource(seed))
+		maker.seed = seed
 	}
 }
 
@@ -67,10 +68,13 @@ func (m Maker) fillStruct(valueOf reflect.Value) error {
 func (m Maker) fillSimple(tagValue string, field reflect.Value) error {
 	switch optionValueOf(tagValue) {
 	case random:
-		if err := fillRandomSimple(m.rand, field, tagValue); err != nil {
+		if err := fillRandomSimple(m.seed, field, tagValue); err != nil {
 			return err
 		}
 	case regex:
+		if err := fillRegexSimple(m.seed, field, tagValue); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("option not available %s", tagValue)
 	}

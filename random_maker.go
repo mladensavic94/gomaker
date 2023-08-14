@@ -17,7 +17,14 @@ type constraints struct {
 }
 
 var defaultConstraints = constraints{min: 1, max: 10, step: 1}
-var pattern = regexp.MustCompile(`\[(\d*)?;(\d*)?;(\d*\.?\d)?]`)
+var randomPattern = regexp.MustCompile(`\[(\d*)?;(\d*)?;(\d*\.?\d)?]`)
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const (
+	letterIdxBits = 6
+	letterIdxMask = 1<<letterIdxBits - 1
+	letterIdxMax  = 63 / letterIdxBits
+)
 
 func (c constraints) Validate(kind reflect.Kind) error {
 	if c.min > c.max {
@@ -36,12 +43,13 @@ func (c constraints) Validate(kind reflect.Kind) error {
 	return nil
 }
 
-func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error {
+func fillRandomSimple(seed int64, field reflect.Value, tagValue string) error {
 	c := getOptions(tagValue)
 	kind := field.Kind()
 	if err := c.Validate(kind); err != nil {
 		return err
 	}
+	r := rand.New(rand.NewSource(seed))
 	switch kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		field.SetInt(randInt64(r, c))
@@ -50,7 +58,7 @@ func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error 
 	case reflect.Float32, reflect.Float64:
 		field.SetFloat(randFloat64(r, c))
 	case reflect.Complex64, reflect.Complex128:
-		field.SetComplex(complex(rand.Float64(), rand.Float64()))
+		field.SetComplex(complex(randFloat64(r, c), randFloat64(r, c)))
 	case reflect.String:
 		field.SetString(randString(r, randInt64(r, c)))
 	case reflect.Bool:
@@ -62,7 +70,7 @@ func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error 
 }
 
 func getOptions(value string) constraints {
-	matches := pattern.FindStringSubmatch(value)
+	matches := randomPattern.FindStringSubmatch(value)
 	c := defaultConstraints
 	if len(matches) == 4 {
 		if tmp, err := strconv.Atoi(matches[1]); err == nil {
@@ -89,13 +97,6 @@ func randFloat64(r *rand.Rand, in constraints) float64 {
 	res := (scale - mod) * in.step
 	return res
 }
-
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-const (
-	letterIdxBits = 6
-	letterIdxMask = 1<<letterIdxBits - 1
-	letterIdxMax  = 63 / letterIdxBits
-)
 
 func randString(r *rand.Rand, n int64) string {
 	b := make([]byte, n)
