@@ -14,16 +14,17 @@ type option string
 const (
 	random option = "rand"
 	regex  option = "regex"
-	parent option = "parent"
-	seed   option = "seed"
+	rel    option = "rel"
+	fc     option = "func"
 )
 
 type Maker struct {
-	seed int64
+	seed    int64
+	funcMap map[string]func() string
 }
 
 func New(options ...func(maker *Maker)) *Maker {
-	m := &Maker{seed: time.Now().Unix()}
+	m := &Maker{seed: time.Now().Unix(), funcMap: map[string]func() string{}}
 	for _, opt := range options {
 		opt(m)
 	}
@@ -33,6 +34,12 @@ func New(options ...func(maker *Maker)) *Maker {
 func WithSeed(seed int64) func(maker *Maker) {
 	return func(maker *Maker) {
 		maker.seed = seed
+	}
+}
+
+func WithFuncMap(f map[string]func() string) func(maker *Maker) {
+	return func(maker *Maker) {
+		maker.funcMap = f
 	}
 }
 
@@ -75,6 +82,10 @@ func (m Maker) fillSimple(tagValue string, field reflect.Value) error {
 		if err := fillRegexSimple(m.seed, field, tagValue); err != nil {
 			return err
 		}
+	case fc:
+		if err := fillFuncSimple(m.funcMap, field, tagValue); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("option not available %s", tagValue)
 	}
@@ -87,6 +98,9 @@ func optionValueOf(in string) option {
 	}
 	if strings.HasPrefix(in, string(regex)) {
 		return regex
+	}
+	if strings.HasPrefix(in, string(fc)) {
+		return fc
 	}
 	return ""
 }
