@@ -7,6 +7,7 @@ import (
 )
 
 func Test_getOptions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		arg   string
@@ -60,6 +61,7 @@ func Test_getOptions(t *testing.T) {
 }
 
 func Test_randInt64(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		args constraints

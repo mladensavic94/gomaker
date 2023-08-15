@@ -22,6 +22,10 @@ func Test_generate(t *testing.T) {
 			`\.{5}`,
 		},
 		{
+			"any char",
+			`.{15}`,
+		},
+		{
 			"repeater",
 			`^([A-Z]\.[a-z])*$`,
 		},

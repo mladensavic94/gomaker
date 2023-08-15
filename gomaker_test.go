@@ -6,10 +6,10 @@ import (
 	"gomaker"
 	"math/rand"
 	"testing"
-	"time"
 )
 
 func TestMaker_random(t *testing.T) {
+	t.Parallel()
 	type inner struct {
 		InnerInt int32 `gomaker:"rand"`
 	}
@@ -136,6 +136,7 @@ func BenchmarkFuncFill(b *testing.B) {
 }
 
 func Test_repeatable_generation(t *testing.T) {
+	t.Parallel()
 	type dummy struct {
 		DummyId     int64  `gomaker:"rand[1;100;5]"`
 		DummyString string `gomaker:"rand[10;10;]"`
@@ -160,9 +161,13 @@ func Test_repeatable_generation(t *testing.T) {
 }
 
 func TestMaker_regex(t *testing.T) {
+	t.Parallel()
 	type dummy struct {
 		DummyString string `gomaker:"regex[^\\d+$]"`
 		DummyInt    int32  `gomaker:"regex[[0-9]{10}]"`
+	}
+	type failRegex struct {
+		Str string `gomaker:"regexalmost[]"`
 	}
 	maker := gomaker.New()
 	tests := []struct {
@@ -191,6 +196,12 @@ func TestMaker_regex(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			"fail regex",
+			&failRegex{},
+			errors.New("regex validation failed"),
+			nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -211,26 +222,15 @@ func TestMaker_regex(t *testing.T) {
 	}
 }
 
-func TestMaker_race(t *testing.T) {
-	type dummy struct {
-		DummyString string `gomaker:"regex[^\\d+$]"`
-	}
-	maker := gomaker.New()
-	go maker.Fill(&dummy{})
-	go maker.Fill(&dummy{})
-	go maker.Fill(&dummy{})
-
-	time.Sleep(time.Second)
-
-}
-
 func TestMaker_func(t *testing.T) {
+	t.Parallel()
 	type dummy struct {
 		DummyString  string     `gomaker:"func[test]"`
 		DummyComplex complex128 `gomaker:"func[complex]"`
 		DummyId      int64      `gomaker:"func[int64]"`
 		DummyFloat   float32    `gomaker:"func[float]"`
 		DummyBool    bool       `gomaker:"func[bool]"`
+		DummyUint    uint64     `gomaker:"func[int64]"`
 	}
 	type unknown struct {
 		DummyId  int64 `gomaker:"func[missing]"`
@@ -300,6 +300,7 @@ func TestMaker_func(t *testing.T) {
 }
 
 func TestMaker_customTypes(t *testing.T) {
+	t.Parallel()
 	type wrapper string
 	type dummy struct {
 		WrapRand  wrapper `gomaker:"rand[10;10;]"`
@@ -316,7 +317,7 @@ func TestMaker_customTypes(t *testing.T) {
 		sanity func(in *dummy) error
 	}{
 		{
-			"happy path",
+			"customTypes",
 			&dummy{},
 			nil,
 			func(in *dummy) error {
@@ -331,6 +332,46 @@ func TestMaker_customTypes(t *testing.T) {
 				}
 				return nil
 			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := maker.Fill(tt.arg)
+			if err != nil {
+				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
+					t.Fatalf("expected: %v, got: %v", tt.err, err)
+				}
+			}
+			if tt.sanity != nil {
+				err = tt.sanity(tt.arg.(*dummy))
+				if err != nil {
+					t.Fatalf("sanity check failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestMaker_errors(t *testing.T) {
+	t.Parallel()
+	type dummy struct {
+		DummyId int64 `gomaker:"func[bool]"`
+	}
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"bool": func() string {
+		return "t"
+	}}))
+	tests := []struct {
+		name   string
+		arg    any
+		err    error
+		sanity func(in *dummy) error
+	}{
+		{
+			"errors",
+			&dummy{},
+			errors.New("strconv.ParseInt: parsing \"t\": invalid syntax"),
+			nil,
 		},
 	}
 
