@@ -43,13 +43,12 @@ func (c constraints) Validate(kind reflect.Kind) error {
 	return nil
 }
 
-func fillRandomSimple(seed int64, field reflect.Value, tagValue string) error {
+func fillRandomSimple(r *rand.Rand, field reflect.Value, tagValue string) error {
 	c := getOptions(tagValue)
 	kind := field.Kind()
 	if err := c.Validate(kind); err != nil {
 		return err
 	}
-	r := rand.New(rand.NewSource(seed))
 	switch kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		field.SetInt(randInt64(r, c))

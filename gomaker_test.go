@@ -392,3 +392,59 @@ func TestMaker_errors(t *testing.T) {
 		})
 	}
 }
+
+func TestMaker_slices(t *testing.T) {
+	t.Parallel()
+	type inner struct {
+		Floats float64 `gomaker:"rand[1;100;0.1]"`
+	}
+	type dummy struct {
+		Ints   []int64  `gomaker:"func[int64]"`
+		Strs   []string `gomaker:"regex[.{5}]"`
+		Inners []inner
+	}
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"int64": func() string {
+		return "1"
+	}}))
+	tests := []struct {
+		name   string
+		arg    any
+		err    error
+		sanity func(in *dummy) error
+	}{
+		{
+			"slices",
+			&dummy{Ints: make([]int64, 10), Strs: make([]string, 5), Inners: make([]inner, 2)},
+			nil,
+			func(in *dummy) error {
+				if len(in.Ints) == 0 && in.Ints[0] != 0 {
+					return errors.New("ints not assigned")
+				}
+				if len(in.Strs) == 0 && in.Strs[0] != "" {
+					return errors.New("strs not assigned")
+				}
+				if len(in.Inners) == 0 && in.Inners[0].Floats != 0 {
+					return errors.New("inners not assigned")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := maker.Fill(tt.arg)
+			if err != nil {
+				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
+					t.Fatalf("expected: %v, got: %v", tt.err, err)
+				}
+			}
+			if tt.sanity != nil {
+				err = tt.sanity(tt.arg.(*dummy))
+				if err != nil {
+					t.Fatalf("sanity check failed: %v", err)
+				}
+			}
+		})
+	}
+}

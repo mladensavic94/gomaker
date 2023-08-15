@@ -16,7 +16,7 @@ var regexPattern = regexp.MustCompile(`^regex\[.*]$`)
 
 var generationFailed = errors.New("generator failed")
 
-func fillRegexSimple(seed int64, field reflect.Value, tagValue string) error {
+func fillRegexSimple(r *rand.Rand, field reflect.Value, tagValue string) error {
 	if !regexPattern.MatchString(tagValue) {
 		return errors.New("regex validation failed")
 	}
@@ -26,7 +26,6 @@ func fillRegexSimple(seed int64, field reflect.Value, tagValue string) error {
 		return errors.New("regex parse failed")
 	}
 
-	r := rand.New(rand.NewSource(seed))
 	result, err := generate(r, parsedRegex)
 	if err != nil {
 		return err

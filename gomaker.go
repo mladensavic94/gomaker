@@ -2,6 +2,7 @@ package gomaker
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
 	"time"
@@ -47,11 +48,14 @@ func (m Maker) Fill(model any) error {
 	if reflect.TypeOf(model).Kind() != reflect.Pointer {
 		return fmt.Errorf("non-pointer argument")
 	}
-	return m.fillStruct(reflect.Indirect(reflect.ValueOf(model)))
+	return m.fillStruct(nil, reflect.Indirect(reflect.ValueOf(model)))
 }
 
-func (m Maker) fillStruct(valueOf reflect.Value) error {
+func (m Maker) fillStruct(r *rand.Rand, valueOf reflect.Value) error {
 	typeOf := valueOf.Type()
+	if r == nil {
+		r = rand.New(rand.NewSource(m.seed))
+	}
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := typeOf.Field(i)
 		if !field.IsExported() {
@@ -59,27 +63,29 @@ func (m Maker) fillStruct(valueOf reflect.Value) error {
 		}
 		tagValue := field.Tag.Get(tag)
 		kind := field.Type.Kind()
+		var err error
 		if kind == reflect.Struct {
-			if err := m.fillStruct(valueOf.FieldByName(field.Name)); err != nil {
-				return err
-			}
+			err = m.fillStruct(r, valueOf.FieldByName(field.Name))
+		} else if kind == reflect.Slice {
+			err = m.fillSlice(r, tagValue, valueOf.FieldByName(field.Name))
 		} else {
-			if err := m.fillSimple(tagValue, valueOf.FieldByName(field.Name)); err != nil {
-				return err
-			}
+			err = m.fillSimple(r, tagValue, valueOf.FieldByName(field.Name))
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (m Maker) fillSimple(tagValue string, field reflect.Value) error {
+func (m Maker) fillSimple(r *rand.Rand, tagValue string, field reflect.Value) error {
 	switch optionValueOf(tagValue) {
 	case random:
-		if err := fillRandomSimple(m.seed, field, tagValue); err != nil {
+		if err := fillRandomSimple(r, field, tagValue); err != nil {
 			return err
 		}
 	case regex:
-		if err := fillRegexSimple(m.seed, field, tagValue); err != nil {
+		if err := fillRegexSimple(r, field, tagValue); err != nil {
 			return err
 		}
 	case fc:
@@ -88,6 +94,23 @@ func (m Maker) fillSimple(tagValue string, field reflect.Value) error {
 		}
 	default:
 		return fmt.Errorf("option not available %s", tagValue)
+	}
+	return nil
+}
+
+func (m Maker) fillSlice(r *rand.Rand, tagValue string, field reflect.Value) error {
+	for i := 0; i < field.Len(); i++ {
+		index := field.Index(i)
+		var err error
+		if index.Kind() == reflect.Struct {
+			err = m.fillStruct(r, index)
+		} else {
+			err = m.fillSimple(r, tagValue, index)
+		}
+		if err != nil {
+			return err
+		}
+
 	}
 	return nil
 }
