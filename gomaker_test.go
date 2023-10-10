@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestMaker_random(t *testing.T) {
+func TestMaker_random_with_tags(t *testing.T) {
 	t.Parallel()
 	type inner struct {
 		InnerInt int32 `gomaker:"rand"`
@@ -20,31 +20,34 @@ func TestMaker_random(t *testing.T) {
 		Inner        inner
 	}
 	type unknown struct {
-		DummyId int64 `gomaker:"test123"`
+		UnknownId int64 `gomaker:"test123"`
 	}
 
-	maker := gomaker.New()
 	tests := []struct {
 		name   string
 		arg    any
+		maker  *gomaker.Maker
 		err    error
 		sanity func(in *dummy) error
 	}{
 		{
 			"pass non pointer",
 			dummy{},
+			gomaker.New(),
 			fmt.Errorf("non-pointer argument"),
 			nil,
 		},
 		{
 			"pass unknown",
 			&unknown{},
+			gomaker.New(),
 			fmt.Errorf("option not available test123"),
 			nil,
 		},
 		{
 			"happy path",
 			&dummy{},
+			gomaker.New(),
 			nil,
 			func(in *dummy) error {
 				if in.DummyId == 0 {
@@ -66,7 +69,84 @@ func TestMaker_random(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := maker.Fill(tt.arg)
+			err := tt.maker.Fill(tt.arg)
+			if err != nil {
+				if tt.err != nil && err.Error() != tt.err.Error() {
+					t.Fatalf("expected: %v, got: %v", tt.err, err)
+				}
+			}
+			if tt.sanity != nil {
+				err = tt.sanity(tt.arg.(*dummy))
+				if err != nil {
+					t.Fatalf("sanity check failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestMaker_random(t *testing.T) {
+	t.Parallel()
+	type inner struct {
+		InnerInt int32
+	}
+	type dummy struct {
+		DummyId      int64
+		DummyString  string
+		DummyComplex complex128
+		Inner        inner
+	}
+	type unknown struct {
+		UnknownId int64
+	}
+
+	tests := []struct {
+		name   string
+		arg    any
+		maker  *gomaker.Maker
+		err    error
+		sanity func(in *dummy) error
+	}{
+		{
+			"pass non pointer",
+			dummy{},
+			gomaker.New(),
+			fmt.Errorf("non-pointer argument"),
+			nil,
+		},
+		{
+			"pass unknown",
+			&unknown{},
+			gomaker.New(gomaker.WithFieldsMapping(map[string]any{"UnknownId": "test123"})),
+			fmt.Errorf("option not available test123"),
+			nil,
+		},
+		{
+			"happy path",
+			&dummy{},
+			gomaker.New(gomaker.WithFieldsMapping(map[string]any{"DummyId": "rand[1;10;1]", "DummyString": "rand", "DummyComplex": "rand", "Inner": map[string]any{"InnerInt": "rand"}})),
+			nil,
+			func(in *dummy) error {
+				if in.DummyId == 0 {
+					return errors.New("int not assigned")
+				}
+				if in.DummyString == "" {
+					return errors.New("string not assigned")
+				}
+				if in.DummyComplex == 0 {
+					return errors.New("complex not assigned")
+				}
+				if in.Inner.InnerInt == 0 {
+					return errors.New("inner not assigned")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.maker.Fill(tt.arg)
 			if err != nil {
 				if tt.err != nil && err.Error() != tt.err.Error() {
 					t.Fatalf("expected: %v, got: %v", tt.err, err)
@@ -89,6 +169,38 @@ func BenchmarkRandFill(b *testing.B) {
 	}
 
 	maker := gomaker.New()
+	model := &dummy{}
+	for i := 0; i < b.N; i++ {
+		err := maker.Fill(model)
+		if err != nil {
+			b.FailNow()
+		}
+	}
+}
+
+func BenchmarkRandFill_WithPreloadMapping(b *testing.B) {
+	type dummy struct {
+		DummyId     int64
+		DummyString string
+	}
+
+	maker := gomaker.New(gomaker.WithFieldsMapping(map[string]any{"DummyId": "rand[1;100;5]", "DummyString": "rand[10;10;]"}))
+	model := &dummy{}
+	for i := 0; i < b.N; i++ {
+		err := maker.Fill(model)
+		if err != nil {
+			b.FailNow()
+		}
+	}
+}
+
+func BenchmarkRegexFill_WithPreloadMapping(b *testing.B) {
+	type dummy struct {
+		DummyId     int64
+		DummyString string
+	}
+
+	maker := gomaker.New(gomaker.WithFieldsMapping(map[string]any{"DummyId": `regex[[0-9]{10}]`, "DummyString": `regex[(abc)+]`}))
 	model := &dummy{}
 	for i := 0; i < b.N; i++ {
 		err := maker.Fill(model)
@@ -135,6 +247,27 @@ func BenchmarkFuncFill(b *testing.B) {
 	}
 }
 
+func BenchmarkFuncFill_WithPreloadMapping(b *testing.B) {
+	type dummy struct {
+		DummyId     int64
+		DummyString string
+	}
+
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"randomInt": func() string {
+		return fmt.Sprint(rand.Int())
+	}, "flatStr": func() string {
+		return "123456"
+	}}), gomaker.WithFieldsMapping(map[string]any{"DummyId": "func[randomInt]", "DummyString": "func[flatStr]"}))
+	model := &dummy{}
+	for i := 0; i < b.N; i++ {
+		err := maker.Fill(model)
+		if err != nil {
+			println(err.Error())
+			b.FailNow()
+		}
+	}
+}
+
 func Test_repeatable_generation(t *testing.T) {
 	t.Parallel()
 	type dummy struct {
@@ -163,28 +296,30 @@ func Test_repeatable_generation(t *testing.T) {
 func TestMaker_regex(t *testing.T) {
 	t.Parallel()
 	type dummy struct {
-		DummyString string `gomaker:"regex[^\\d+$]"`
-		DummyInt    int32  `gomaker:"regex[[0-9]{10}]"`
+		DummyString string
+		DummyInt    int32
 	}
 	type failRegex struct {
-		Str string `gomaker:"regexalmost[]"`
+		Str string
 	}
-	maker := gomaker.New()
 	tests := []struct {
 		name   string
 		arg    any
+		maker  *gomaker.Maker
 		err    error
 		sanity func(in *dummy) error
 	}{
 		{
 			"pass non pointer",
 			dummy{},
+			gomaker.New(),
 			errors.New("non-pointer argument"),
 			nil,
 		},
 		{
 			"happy path",
 			&dummy{},
+			gomaker.New(gomaker.WithFieldsMapping(map[string]any{"DummyString": `regex[^\\d+$]`, "DummyInt": `regex[[0-9]{10}]`})),
 			nil,
 			func(in *dummy) error {
 				if in.DummyString == "" {
@@ -199,6 +334,7 @@ func TestMaker_regex(t *testing.T) {
 		{
 			"fail regex",
 			&failRegex{},
+			gomaker.New(gomaker.WithFieldsMapping(map[string]any{"Str": `regexalmost[]`})),
 			errors.New("regex validation failed"),
 			nil,
 		},
@@ -206,7 +342,7 @@ func TestMaker_regex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := maker.Fill(tt.arg)
+			err := tt.maker.Fill(tt.arg)
 			if err != nil {
 				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
 					t.Fatalf("expected: %v, got: %v", tt.err, err)
@@ -225,18 +361,18 @@ func TestMaker_regex(t *testing.T) {
 func TestMaker_func(t *testing.T) {
 	t.Parallel()
 	type dummy struct {
-		DummyString  string     `gomaker:"func[test]"`
-		DummyComplex complex128 `gomaker:"func[complex]"`
-		DummyId      int64      `gomaker:"func[int64]"`
-		DummyFloat   float32    `gomaker:"func[float]"`
-		DummyBool    bool       `gomaker:"func[bool]"`
-		DummyUint    uint64     `gomaker:"func[int64]"`
+		DummyString  string
+		DummyComplex complex128
+		DummyId      int64
+		DummyFloat   float32
+		DummyBool    bool
+		DummyUint    uint64
 	}
 	type unknown struct {
 		DummyId  int64 `gomaker:"func[missing]"`
-		DummyInt int64 `gomaker:"func[complex]"`
+		DummyInt int64
 	}
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"test": func() string {
+	funcMap := map[string]func() string{"test": func() string {
 		return "123"
 	}, "complex": func() string {
 		return "1+1i"
@@ -246,22 +382,25 @@ func TestMaker_func(t *testing.T) {
 		return "1.2"
 	}, "bool": func() string {
 		return "t"
-	}}))
+	}}
 	tests := []struct {
 		name   string
 		arg    any
+		maker  *gomaker.Maker
 		err    error
 		sanity func(in *dummy) error
 	}{
 		{
 			"missing func",
 			&unknown{},
+			gomaker.New(gomaker.WithFuncMap(funcMap)),
 			errors.New("map missing fn missing"),
 			nil,
 		},
 		{
 			"happy path",
 			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMap), gomaker.WithFieldsMapping(map[string]any{"DummyUint": "func[int64]", "DummyBool": "func[bool]", "DummyFloat": "func[float]", "DummyId": "func[int64]", "DummyComplex": "func[complex]", "DummyString": "func[test]"})),
 			nil,
 			func(in *dummy) error {
 				if in.DummyString != "123" {
@@ -283,7 +422,7 @@ func TestMaker_func(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := maker.Fill(tt.arg)
+			err := tt.maker.Fill(tt.arg)
 			if err != nil {
 				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
 					t.Fatalf("expected: %v, got: %v", tt.err, err)
@@ -303,22 +442,24 @@ func TestMaker_customTypes(t *testing.T) {
 	t.Parallel()
 	type wrapper string
 	type dummy struct {
-		WrapRand  wrapper `gomaker:"rand[10;10;]"`
-		WrapRegex wrapper `gomaker:"regex[^test$]"`
-		WrapFunc  wrapper `gomaker:"func[test]"`
+		WrapRand  wrapper
+		WrapRegex wrapper
+		WrapFunc  wrapper
 	}
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"test": func() string {
+	funcMap := map[string]func() string{"test": func() string {
 		return "123"
-	}}))
+	}}
 	tests := []struct {
 		name   string
 		arg    any
+		maker  *gomaker.Maker
 		err    error
 		sanity func(in *dummy) error
 	}{
 		{
 			"customTypes",
 			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMap), gomaker.WithFieldsMapping(map[string]any{"WrapRand": "rand[10;10;]", "WrapRegex": `regex[^test$]`, "WrapFunc": "func[test]"})),
 			nil,
 			func(in *dummy) error {
 				if in.WrapRand == "" {
@@ -337,7 +478,7 @@ func TestMaker_customTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := maker.Fill(tt.arg)
+			err := tt.maker.Fill(tt.arg)
 			if err != nil {
 				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
 					t.Fatalf("expected: %v, got: %v", tt.err, err)
