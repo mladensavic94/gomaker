@@ -21,12 +21,12 @@ const (
 
 type Maker struct {
 	seed    int64
-	funcMap map[string]func() string
+	funcMap map[string]func() any
 	fields  map[string]any
 }
 
 func New(options ...func(maker *Maker)) *Maker {
-	m := &Maker{seed: time.Now().Unix(), funcMap: map[string]func() string{}}
+	m := &Maker{seed: time.Now().Unix(), funcMap: map[string]func() any{}}
 	for _, opt := range options {
 		opt(m)
 	}
@@ -39,7 +39,7 @@ func WithSeed(seed int64) func(maker *Maker) {
 	}
 }
 
-func WithFuncMap(f map[string]func() string) func(maker *Maker) {
+func WithFuncMap(f map[string]func() any) func(maker *Maker) {
 	return func(maker *Maker) {
 		maker.funcMap = f
 	}
@@ -51,7 +51,7 @@ func WithFieldsMapping(f map[string]any) func(maker *Maker) {
 	}
 }
 
-func (m Maker) Fill(model any) error {
+func (m *Maker) Fill(model any) error {
 	if reflect.TypeOf(model).Kind() != reflect.Pointer {
 		return fmt.Errorf("non-pointer argument")
 	}
@@ -81,7 +81,16 @@ func buildGraph(valueOf reflect.Value) (map[string]any, error) {
 			m, _ := buildGraph(valueOf.FieldByName(field.Name))
 			graph[field.Name] = m
 		} else if kind == reflect.Slice {
-			//???
+			if valueOf.Field(i).Type().Elem().Kind() == reflect.Struct {
+				m, _ := buildGraph(valueOf.Field(i).Index(0))
+				graph[field.Name] = m
+			} else {
+				if tagValue == "" {
+					continue
+				}
+				graph[field.Name] = tagValue
+			}
+
 		} else {
 			if tagValue == "" {
 				continue
@@ -92,12 +101,15 @@ func buildGraph(valueOf reflect.Value) (map[string]any, error) {
 	return graph, err
 }
 
-func (m Maker) fillStruct(r *rand.Rand, valueOf reflect.Value, fields map[string]any) error {
+func (m *Maker) fillStruct(r *rand.Rand, valueOf reflect.Value, fields map[string]any) error {
 	var err error
 	for key, val := range fields {
 		fieldsKey := reflect.TypeOf(val).Kind()
 		if fieldsKey == reflect.String {
 			tagValue := val.(string)
+			if valueOf.Kind() == reflect.Slice {
+				return m.fillSlice(r, tagValue, valueOf, fields)
+			}
 			fieldByName := valueOf.FieldByName(key)
 			kind := fieldByName.Kind()
 			if kind == reflect.Struct {
@@ -107,20 +119,19 @@ func (m Maker) fillStruct(r *rand.Rand, valueOf reflect.Value, fields map[string
 			} else {
 				err = m.fillSimple(r, tagValue, fieldByName)
 			}
-
 		} else if fieldsKey == reflect.Map {
 			err = m.fillStruct(r, valueOf.FieldByName(key), fields[key].(map[string]any))
 		} else {
 			return fmt.Errorf("unrecognized type %v", fieldsKey)
 		}
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (m Maker) fillSimple(r *rand.Rand, tagValue string, field reflect.Value) error {
+func (m *Maker) fillSimple(r *rand.Rand, tagValue string, field reflect.Value) error {
 	switch optionValueOf(tagValue) {
 	case random:
 		if err := fillRandomSimple(r, field, tagValue); err != nil {
@@ -140,7 +151,7 @@ func (m Maker) fillSimple(r *rand.Rand, tagValue string, field reflect.Value) er
 	return nil
 }
 
-func (m Maker) fillSlice(r *rand.Rand, tagValue string, field reflect.Value, fields map[string]any) error {
+func (m *Maker) fillSlice(r *rand.Rand, tagValue string, field reflect.Value, fields map[string]any) error {
 	for i := 0; i < field.Len(); i++ {
 		index := field.Index(i)
 		var err error

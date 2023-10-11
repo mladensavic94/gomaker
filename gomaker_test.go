@@ -15,6 +15,8 @@ func TestMaker_random_with_tags(t *testing.T) {
 	}
 	type dummy struct {
 		DummyId      int64      `gomaker:"rand[1;10;1]"`
+		DummyUint    uint64     `gomaker:"rand[1;10;1]"`
+		DummyFloat   float64    `gomaker:"rand"`
 		DummyString  string     `gomaker:"rand"`
 		DummyComplex complex128 `gomaker:"rand"`
 		Inner        inner
@@ -232,9 +234,9 @@ func BenchmarkFuncFill(b *testing.B) {
 		DummyString string `gomaker:"func[flatStr]"`
 	}
 
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"randomInt": func() string {
-		return fmt.Sprint(rand.Int())
-	}, "flatStr": func() string {
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() any{"randomInt": func() any {
+		return rand.Int()
+	}, "flatStr": func() any {
 		return "123456"
 	}}))
 	model := &dummy{}
@@ -253,9 +255,9 @@ func BenchmarkFuncFill_WithPreloadMapping(b *testing.B) {
 		DummyString string
 	}
 
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"randomInt": func() string {
-		return fmt.Sprint(rand.Int())
-	}, "flatStr": func() string {
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() any{"randomInt": func() any {
+		return rand.Int()
+	}, "flatStr": func() any {
 		return "123456"
 	}}), gomaker.WithFieldsMapping(map[string]any{"DummyId": "func[randomInt]", "DummyString": "func[flatStr]"}))
 	model := &dummy{}
@@ -372,16 +374,18 @@ func TestMaker_func(t *testing.T) {
 		DummyId  int64 `gomaker:"func[missing]"`
 		DummyInt int64
 	}
-	funcMap := map[string]func() string{"test": func() string {
+	funcMap := map[string]func() any{"test": func() any {
 		return "123"
-	}, "complex": func() string {
-		return "1+1i"
-	}, "int64": func() string {
-		return "12"
-	}, "float": func() string {
-		return "1.2"
-	}, "bool": func() string {
-		return "t"
+	}, "complex": func() any {
+		return 1 + 1i
+	}, "int64": func() any {
+		return int64(12)
+	}, "uint64": func() any {
+		return uint64(12)
+	}, "float": func() any {
+		return 1.2
+	}, "bool": func() any {
+		return true
 	}}
 	tests := []struct {
 		name   string
@@ -400,7 +404,7 @@ func TestMaker_func(t *testing.T) {
 		{
 			"happy path",
 			&dummy{},
-			gomaker.New(gomaker.WithFuncMap(funcMap), gomaker.WithFieldsMapping(map[string]any{"DummyUint": "func[int64]", "DummyBool": "func[bool]", "DummyFloat": "func[float]", "DummyId": "func[int64]", "DummyComplex": "func[complex]", "DummyString": "func[test]"})),
+			gomaker.New(gomaker.WithFuncMap(funcMap), gomaker.WithFieldsMapping(map[string]any{"DummyUint": "func[uint64]", "DummyBool": "func[bool]", "DummyFloat": "func[float]", "DummyId": "func[int64]", "DummyComplex": "func[complex]", "DummyString": "func[test]"})),
 			nil,
 			func(in *dummy) error {
 				if in.DummyString != "123" {
@@ -446,7 +450,7 @@ func TestMaker_customTypes(t *testing.T) {
 		WrapRegex wrapper
 		WrapFunc  wrapper
 	}
-	funcMap := map[string]func() string{"test": func() string {
+	funcMap := map[string]func() any{"test": func() any {
 		return "123"
 	}}
 	tests := []struct {
@@ -497,28 +501,63 @@ func TestMaker_customTypes(t *testing.T) {
 func TestMaker_errors(t *testing.T) {
 	t.Parallel()
 	type dummy struct {
-		DummyId int64 `gomaker:"func[bool]"`
+		DummyString  string
+		DummyComplex complex128
+		DummyId      int64
+		DummyFloat   float32
+		DummyBool    bool
+		DummyUint    uint64
 	}
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"bool": func() string {
-		return "t"
-	}}))
+	funcMAp := map[string]func() any{"bool": func() any {
+		return true
+	}}
 	tests := []struct {
 		name   string
 		arg    any
+		maker  *gomaker.Maker
 		err    error
 		sanity func(in *dummy) error
 	}{
 		{
-			"errors",
+			"int64",
 			&dummy{},
-			errors.New("strconv.ParseInt: parsing \"t\": invalid syntax"),
+			gomaker.New(gomaker.WithFuncMap(funcMAp), gomaker.WithFieldsMapping(map[string]any{"DummyId": "func[bool]"})),
+			errors.New("expected int64 got bool"),
+			nil,
+		},
+		{
+			"uint64",
+			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMAp), gomaker.WithFieldsMapping(map[string]any{"DummyUint": "func[bool]"})),
+			errors.New("expected uint64 got bool"),
+			nil,
+		},
+		{
+			"float64",
+			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMAp), gomaker.WithFieldsMapping(map[string]any{"DummyFloat": "func[bool]"})),
+			errors.New("expected float64 got bool"),
+			nil,
+		},
+		{
+			"complex128",
+			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMAp), gomaker.WithFieldsMapping(map[string]any{"DummyComplex": "func[bool]"})),
+			errors.New("expected complex128 got bool"),
+			nil,
+		},
+		{
+			"string",
+			&dummy{},
+			gomaker.New(gomaker.WithFuncMap(funcMAp), gomaker.WithFieldsMapping(map[string]any{"DummyString": "func[bool]"})),
+			errors.New("expected string got bool"),
 			nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := maker.Fill(tt.arg)
+			err := tt.maker.Fill(tt.arg)
 			if err != nil {
 				if (tt.err != nil && err.Error() != tt.err.Error()) || tt.err == nil {
 					t.Fatalf("expected: %v, got: %v", tt.err, err)
@@ -544,8 +583,8 @@ func TestMaker_slices(t *testing.T) {
 		Strs   []string `gomaker:"regex[.{5}]"`
 		Inners []inner
 	}
-	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() string{"int64": func() string {
-		return "1"
+	maker := gomaker.New(gomaker.WithFuncMap(map[string]func() any{"int64": func() any {
+		return int64(1)
 	}}))
 	tests := []struct {
 		name   string
@@ -558,13 +597,13 @@ func TestMaker_slices(t *testing.T) {
 			&dummy{Ints: make([]int64, 10), Strs: make([]string, 5), Inners: make([]inner, 2)},
 			nil,
 			func(in *dummy) error {
-				if len(in.Ints) == 0 && in.Ints[0] != 0 {
+				if in.Ints[0] == 0 {
 					return errors.New("ints not assigned")
 				}
-				if len(in.Strs) == 0 && in.Strs[0] != "" {
+				if in.Strs[0] == "" {
 					return errors.New("strs not assigned")
 				}
-				if len(in.Inners) == 0 && in.Inners[0].Floats != 0 {
+				if in.Inners[0].Floats == 0 {
 					return errors.New("inners not assigned")
 				}
 				return nil

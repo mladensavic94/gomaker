@@ -22,11 +22,14 @@ goos: windows
 goarch: amd64
 pkg: gomaker
 cpu: 12th Gen Intel(R) Core(TM) i9-12900H
-BenchmarkRandFill-20              138298              8621 ns/op            6144 B/op         15 allocs/op
-BenchmarkRegexFill-20             123716              9518 ns/op            7443 B/op         52 allocs/op
-BenchmarkFuncFill-20              148338              7958 ns/op            5812 B/op         11 allocs/op
+BenchmarkRandFill-20                              136150              8866 ns/op            6143 B/op         15 allocs/op
+BenchmarkRandFill_WithPreloadMapping-20           137984              8210 ns/op            5760 B/op          9 allocs/op
+BenchmarkRegexFill-20                             113206             10401 ns/op            7518 B/op         58 allocs/op
+BenchmarkRegexFill_WithPreloadMapping-20          122317              9481 ns/op            7066 B/op         47 allocs/op
+BenchmarkFuncFill-20                              148395              8459 ns/op            5812 B/op         11 allocs/op
+BenchmarkFuncFill_WithPreloadMapping-20           150086              7505 ns/op            5428 B/op          5 allocs/op
 PASS
-ok      gomaker 3.862s
+ok      gomaker 7.665s
 ```
 
 ## TODO
